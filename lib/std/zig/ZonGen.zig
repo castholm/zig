@@ -454,8 +454,9 @@ fn expr(zg: *ZonGen, node: Ast.Node.Index, dest_node: Zoir.Node.Index) Allocator
 
 fn appendIdentStr(zg: *ZonGen, ident_token: Ast.TokenIndex) !u32 {
     const tree = zg.tree;
-    assert(tree.tokenTag(ident_token) == .identifier);
-    const ident_name = tree.tokenSlice(ident_token);
+    const tag = tree.tokenTag(ident_token);
+    assert(tag == .period_identifier or tag == .identifier);
+    const ident_name = std.mem.trimStart(u8, tree.tokenSlice(ident_token), ".");
     if (!mem.startsWith(u8, ident_name, "@")) {
         const start = zg.string_bytes.items.len;
         try zg.string_bytes.appendSlice(zg.gpa, ident_name);

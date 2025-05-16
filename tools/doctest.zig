@@ -685,8 +685,13 @@ fn tokenizeAndPrint(arena: Allocator, out: anytype, raw_src: []const u8) !void {
                 try out.writeAll("</span>");
             },
 
-            .identifier => {
-                const tok_bytes = src[token.loc.start..token.loc.end];
+            .identifier,
+            .period_identifier,
+            => {
+                const tok_bytes = if (token.tag == .period_identifier) blk: {
+                    try out.writeAll(".");
+                    break :blk src[token.loc.start + 1 .. token.loc.end];
+                } else src[token.loc.start..token.loc.end];
                 if (mem.eql(u8, tok_bytes, "undefined") or
                     mem.eql(u8, tok_bytes, "null") or
                     mem.eql(u8, tok_bytes, "true") or

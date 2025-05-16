@@ -185,7 +185,8 @@ fn renderMember(
                     // Keep in sync with logic in `renderFnProto`. Search this file for the marker PROMOTE_CALLCONV_INLINE
                     if (opt_callconv_expr.unwrap()) |callconv_expr| {
                         if (tree.nodeTag(callconv_expr) == .enum_literal) {
-                            if (mem.eql(u8, "@\"inline\"", tree.tokenSlice(tree.nodeMainToken(callconv_expr)))) {
+                            const slice = tree.tokenSlice(tree.nodeMainToken(callconv_expr));
+                            if (mem.eql(u8, ".inline", slice) or mem.eql(u8, "@\"inline\"", slice)) {
                                 try ais.writer().writeAll("inline ");
                             }
                         }
@@ -373,9 +374,12 @@ fn renderExpression(r: *Render, node: Ast.Node.Index, space: Space) Error!void {
 
         .error_value => {
             const main_token = tree.nodeMainToken(node);
-            try renderToken(r, main_token, .none);
-            try renderToken(r, main_token + 1, .none);
-            return renderIdentifier(r, main_token + 2, space, .eagerly_unquote);
+            try renderToken(r, main_token, .none); // error
+            if (tree.tokenTag(main_token + 1) == .period_identifier) {
+                return renderPeriodIdentifier(r, main_token + 1, space); // .name
+            }
+            try renderToken(r, main_token + 1, .none); // .
+            return renderIdentifier(r, main_token + 2, space, .eagerly_unquote); // name
         },
 
         .block_two,
@@ -438,7 +442,6 @@ fn renderExpression(r: *Render, node: Ast.Node.Index, space: Space) Error!void {
 
         .field_access => {
             const lhs, const name_token = tree.nodeData(node).node_and_token;
-            const dot_token = name_token - 1;
 
             try ais.pushIndent(.field_access);
             try renderExpression(r, lhs, .none);
@@ -447,11 +450,17 @@ fn renderExpression(r: *Render, node: Ast.Node.Index, space: Space) Error!void {
             // are on different lines.
             const lhs_last_token = tree.lastToken(lhs);
             const same_line = tree.tokensOnSameLine(lhs_last_token, name_token);
-            if (!same_line and !hasComment(tree, lhs_last_token, dot_token)) try ais.insertNewline();
 
-            try renderToken(r, dot_token, .none);
+            if (tree.tokenTag(name_token) == .period_identifier) {
+                if (!same_line and !hasComment(tree, lhs_last_token, name_token)) try ais.insertNewline();
+                try renderPeriodIdentifier(r, name_token, space); // .name
+            } else {
+                const dot_token = name_token - 1;
+                if (!same_line and !hasComment(tree, lhs_last_token, dot_token)) try ais.insertNewline();
+                try renderToken(r, dot_token, .none); // .
+                try renderIdentifier(r, name_token, space, .eagerly_unquote); // name
+            }
 
-            try renderIdentifier(r, name_token, space, .eagerly_unquote); // field
             ais.popIndent();
         },
 
@@ -869,6 +878,10 @@ fn renderExpression(r: *Render, node: Ast.Node.Index, space: Space) Error!void {
         => return renderAsm(r, tree.fullAsm(node).?, space),
 
         .enum_literal => {
+            const main_token = tree.nodeMainToken(node);
+            if (tree.tokenTag(main_token) == .period_identifier) {
+                return renderPeriodIdentifier(r, main_token, space); // .name
+            }
             try renderToken(r, tree.nodeMainToken(node) - 1, .none); // .
             return renderIdentifier(r, tree.nodeMainToken(node), space, .eagerly_unquote); // name
         },
@@ -1829,7 +1842,11 @@ fn renderFnProto(r: *Render, fn_proto: Ast.full.FnProto, space: Space) Error!voi
 
     if (fn_proto.ast.callconv_expr.unwrap()) |callconv_expr| {
         // Keep in sync with logic in `renderMember`. Search this file for the marker PROMOTE_CALLCONV_INLINE
-        const is_callconv_inline = mem.eql(u8, "@\"inline\"", tree.tokenSlice(tree.nodeMainToken(callconv_expr)));
+        const is_callconv_inline = blk: {
+            if (tree.nodeTag(callconv_expr) != .enum_literal) break :blk false;
+            const slice = tree.tokenSlice(tree.nodeMainToken(callconv_expr));
+            break :blk mem.eql(u8, ".inline", slice) or mem.eql(u8, "@\"inline\"", slice);
+        };
         const is_declaration = fn_proto.name_token != null;
         if (!(is_declaration and is_callconv_inline)) {
             const callconv_lparen = tree.firstToken(callconv_expr) - 1;
@@ -1991,14 +2008,21 @@ fn renderStructInit(
         try ais.pushIndent(.normal);
         try renderToken(r, struct_init.ast.lbrace, .newline);
 
-        try renderToken(r, struct_init.ast.lbrace + 1, .none); // .
-        try renderIdentifier(r, struct_init.ast.lbrace + 2, .space, .eagerly_unquote); // name
+        const separate_dot: u1 = if (tree.tokenTag(struct_init.ast.lbrace + 1) == .period_identifier) blk: {
+            try renderPeriodIdentifier(r, struct_init.ast.lbrace + 1, space); // .name
+            break :blk 0;
+        } else blk: {
+            try renderToken(r, struct_init.ast.lbrace + 1, .none); // .
+            try renderIdentifier(r, struct_init.ast.lbrace + 2, .space, .eagerly_unquote); // name
+            break :blk 1;
+        };
+
         // Don't output a space after the = if expression is a multiline string,
         // since then it will start on the next line.
         const field_node = struct_init.ast.fields[0];
         const expr = tree.nodeTag(field_node);
         var space_after_equal: Space = if (expr == .multiline_string_literal) .none else .space;
-        try renderToken(r, struct_init.ast.lbrace + 3, space_after_equal); // =
+        try renderToken(r, struct_init.ast.lbrace + 2 + separate_dot, space_after_equal); // =
 
         try ais.pushSpace(.comma);
         try renderExpressionFixup(r, field_node, .comma);
@@ -2007,8 +2031,12 @@ fn renderStructInit(
         for (struct_init.ast.fields[1..]) |field_init| {
             const init_token = tree.firstToken(field_init);
             try renderExtraNewlineToken(r, init_token - 3);
-            try renderToken(r, init_token - 3, .none); // .
-            try renderIdentifier(r, init_token - 2, .space, .eagerly_unquote); // name
+            if (tree.tokenTag(init_token - 2) == .period_identifier) {
+                try renderPeriodIdentifier(r, init_token - 2, space); // .name
+            } else {
+                try renderToken(r, init_token - 3, .none); // .
+                try renderIdentifier(r, init_token - 2, .space, .eagerly_unquote); // name
+            }
             space_after_equal = if (tree.nodeTag(field_init) == .multiline_string_literal) .none else .space;
             try renderToken(r, init_token - 1, space_after_equal); // =
 
@@ -2755,6 +2783,22 @@ const QuoteBehavior = enum {
     eagerly_unquote,
     eagerly_unquote_except_underscore,
 };
+
+fn renderPeriodIdentifier(r: *Render, token_index: Ast.TokenIndex, space: Space) Error!void {
+    const tree = r.tree;
+    assert(tree.tokenTag(token_index) == .period_identifier);
+    const lexeme = tokenSliceForRender(tree, token_index);
+
+    if (r.fixups.rename_identifiers.get(lexeme[1..])) |mangled| {
+        const w = r.ais.writer();
+        try w.writeByte('.');
+        try w.writeAll(mangled);
+        try renderSpace(r, token_index, lexeme.len, space);
+        return;
+    }
+
+    return renderToken(r, token_index, space);
+}
 
 fn renderIdentifier(r: *Render, token_index: Ast.TokenIndex, space: Space, quote: QuoteBehavior) Error!void {
     const tree = r.tree;

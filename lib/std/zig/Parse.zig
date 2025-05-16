@@ -2646,6 +2646,11 @@ fn parsePrimaryTypeExpr(p: *Parse) !?Node.Index {
         },
         .keyword_for => return try p.parseFor(expectTypeExpr),
         .keyword_while => return try p.parseWhileTypeExpr(),
+        .period_identifier => return try p.addNode(.{
+            .tag = .enum_literal,
+            .main_token = p.nextToken(),
+            .data = undefined,
+        }),
         .period => switch (p.tokenTag(p.tok_i + 1)) {
             .identifier => {
                 p.tok_i += 1;
@@ -2742,6 +2747,15 @@ fn parsePrimaryTypeExpr(p: *Parse) !?Node.Index {
             else => return null,
         },
         .keyword_error => switch (p.tokenTag(p.tok_i + 1)) {
+            .period_identifier => {
+                const main_token = p.tok_i;
+                p.tok_i += 2;
+                return try p.addNode(.{
+                    .tag = .error_value,
+                    .main_token = main_token,
+                    .data = undefined,
+                });
+            },
             .l_brace => {
                 const error_token = p.tok_i;
                 p.tok_i += 2;
@@ -3027,14 +3041,14 @@ fn parseBlockLabel(p: *Parse) ?TokenIndex {
 
 /// FieldInit <- DOT IDENTIFIER EQUAL Expr
 fn parseFieldInit(p: *Parse) !?Node.Index {
-    if (p.eatTokens(&.{ .period, .identifier, .equal })) |_| {
+    if (p.eatTokens(&.{ .period_identifier, .equal }) orelse p.eatTokens(&.{ .period, .identifier, .equal })) |_| {
         return try p.expectExpr();
     }
     return null;
 }
 
 fn expectFieldInit(p: *Parse) !Node.Index {
-    if (p.eatTokens(&.{ .period, .identifier, .equal })) |_| {
+    if (p.eatTokens(&.{ .period_identifier, .equal }) orelse p.eatTokens(&.{ .period, .identifier, .equal })) |_| {
         return try p.expectExpr();
     }
     return p.fail(.expected_initializer);
@@ -3347,6 +3361,17 @@ fn parseSuffixOp(p: *Parse, lhs: Node.Index) !?Node.Index {
                 .tag = .deref,
                 .main_token = p.nextToken(),
                 .data = .{ .node = lhs },
+            });
+        },
+        .period_identifier => {
+            const period_identifier = p.nextToken();
+            return try p.addNode(.{
+                .tag = .field_access,
+                .main_token = period_identifier,
+                .data = .{ .node_and_token = .{
+                    lhs,
+                    period_identifier,
+                } },
             });
         },
         .period => switch (p.tokenTag(p.tok_i + 1)) {

@@ -93,6 +93,7 @@ pub const Token = struct {
         r_bracket,
         period,
         period_asterisk,
+        period_identifier,
         ellipsis2,
         ellipsis3,
         caret,
@@ -198,6 +199,7 @@ pub const Token = struct {
                 .char_literal,
                 .eof,
                 .builtin,
+                .period_identifier,
                 .number_literal,
                 .doc_comment,
                 .container_doc_comment,
@@ -321,7 +323,7 @@ pub const Token = struct {
         pub fn symbol(tag: Tag) []const u8 {
             return tag.lexeme() orelse switch (tag) {
                 .invalid => "invalid token",
-                .identifier => "an identifier",
+                .identifier, .period_identifier => "an identifier",
                 .string_literal, .multiline_string_literal_line => "a string literal",
                 .char_literal => "a character literal",
                 .eof => "EOF",
@@ -921,6 +923,10 @@ pub const Tokenizer = struct {
                 switch (self.buffer[self.index]) {
                     '.' => continue :state .period_2,
                     '*' => continue :state .period_asterisk,
+                    'a'...'z', 'A'...'Z', '_', '0'...'9' => {
+                        result.tag = .period_identifier;
+                        continue :state .identifier;
+                    },
                     else => result.tag = .period,
                 }
             },

@@ -648,8 +648,13 @@ pub fn firstToken(tree: Ast, node: Node.Index) TokenIndex {
         .struct_init_dot_comma,
         .struct_init_dot_two,
         .struct_init_dot_two_comma,
-        .enum_literal,
         => return tree.nodeMainToken(n) - 1 - end_offset,
+
+        .enum_literal => {
+            const main_token = tree.nodeMainToken(n);
+            const separate_dot = @intFromBool(tree.tokenTag(main_token) == .identifier);
+            return main_token - separate_dot - end_offset;
+        },
 
         .@"catch",
         .equal_equal,
@@ -1004,7 +1009,11 @@ pub fn lastToken(tree: Ast, node: Node.Index) TokenIndex {
         .grouped_expression, .asm_input => return tree.nodeData(n).node_and_token[1] + end_offset,
         .multiline_string_literal, .error_set_decl => return tree.nodeData(n).token_and_token[1] + end_offset,
         .asm_output => return tree.nodeData(n).opt_node_and_token[1] + end_offset,
-        .error_value => return tree.nodeMainToken(n) + 2 + end_offset,
+        .error_value => {
+            const main_token = tree.nodeMainToken(n);
+            const separate_dot = @intFromBool(tree.tokenTag(main_token + 1) == .period);
+            return main_token + 1 + separate_dot + end_offset;
+        },
 
         .anyframe_literal,
         .char_literal,

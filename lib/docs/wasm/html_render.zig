@@ -177,7 +177,13 @@ pub fn fileSourceHtml(
                 }
             },
 
-            .identifier => i: {
+            .identifier,
+            .period_identifier,
+            => i: {
+                const trimmed_slice = if (tag == .period_identifier) blk: {
+                    try out.append(gpa, '.');
+                    break :blk slice[1..];
+                } else slice;
                 if (options.fn_link != .none) {
                     const fn_link = options.fn_link.get();
                     const fn_token = ast.nodeMainToken(fn_link.ast_node);
@@ -186,7 +192,7 @@ pub fn fileSourceHtml(
                         _ = missing_feature_url_escape;
                         try fn_link.fqn(out);
                         try out.appendSlice(gpa, "\">");
-                        try appendEscaped(out, slice);
+                        try appendEscaped(out, trimmed_slice);
                         try out.appendSlice(gpa, "</a>");
                         break :i;
                     }
@@ -194,21 +200,21 @@ pub fn fileSourceHtml(
 
                 if (token_index > 0 and ast.tokenTag(token_index - 1) == .keyword_fn) {
                     try out.appendSlice(gpa, "<span class=\"tok-fn\">");
-                    try appendEscaped(out, slice);
+                    try appendEscaped(out, trimmed_slice);
                     try out.appendSlice(gpa, "</span>");
                     break :i;
                 }
 
-                if (Walk.isPrimitiveNonType(slice)) {
+                if (Walk.isPrimitiveNonType(trimmed_slice)) {
                     try out.appendSlice(gpa, "<span class=\"tok-null\">");
-                    try appendEscaped(out, slice);
+                    try appendEscaped(out, trimmed_slice);
                     try out.appendSlice(gpa, "</span>");
                     break :i;
                 }
 
-                if (std.zig.primitives.isPrimitive(slice)) {
+                if (std.zig.primitives.isPrimitive(trimmed_slice)) {
                     try out.appendSlice(gpa, "<span class=\"tok-type\">");
-                    try appendEscaped(out, slice);
+                    try appendEscaped(out, trimmed_slice);
                     try out.appendSlice(gpa, "</span>");
                     break :i;
                 }
@@ -221,10 +227,10 @@ pub fn fileSourceHtml(
                         _ = missing_feature_url_escape;
                         try out.appendSlice(gpa, g.field_access_buffer.items);
                         try out.appendSlice(gpa, "\">");
-                        try appendEscaped(out, slice);
+                        try appendEscaped(out, trimmed_slice);
                         try out.appendSlice(gpa, "</a>");
                     } else {
-                        try appendEscaped(out, slice);
+                        try appendEscaped(out, trimmed_slice);
                     }
                     break :i;
                 }
@@ -237,13 +243,13 @@ pub fn fileSourceHtml(
                         _ = missing_feature_url_escape;
                         try out.appendSlice(gpa, g.field_access_buffer.items);
                         try out.appendSlice(gpa, "\">");
-                        try appendEscaped(out, slice);
+                        try appendEscaped(out, trimmed_slice);
                         try out.appendSlice(gpa, "</a>");
                         break :i;
                     }
                 }
 
-                try appendEscaped(out, slice);
+                try appendEscaped(out, trimmed_slice);
             },
 
             .number_literal => {

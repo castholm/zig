@@ -411,7 +411,7 @@ const Parse = struct {
         if (ast.nodeTag(node) != .enum_literal)
             return fail(p, main_token, "expected enum literal", .{});
 
-        const ident_name = ast.tokenSlice(main_token);
+        const ident_name = std.mem.trimStart(u8, ast.tokenSlice(main_token), ".");
         if (mem.startsWith(u8, ident_name, "@"))
             return fail(p, main_token, "name must be a valid bare zig identifier", .{});
 
@@ -451,8 +451,9 @@ const Parse = struct {
     /// TODO: try to DRY this with AstGen.identifierTokenString
     fn identifierTokenString(p: *Parse, token: Ast.TokenIndex) InnerError![]const u8 {
         const ast = p.ast;
-        assert(ast.tokenTag(token) == .identifier);
-        const ident_name = ast.tokenSlice(token);
+        const tag = ast.tokenTag(token);
+        assert(tag == .period_identifier or tag == .identifier);
+        const ident_name = std.mem.trimStart(u8, ast.tokenSlice(token), ".");
         if (!mem.startsWith(u8, ident_name, "@")) {
             return ident_name;
         }

@@ -698,8 +698,9 @@ fn walkSlice(
 
 fn walkIdentifier(w: *Walk, name_ident: Ast.TokenIndex) Error!void {
     const ast = w.ast;
-    assert(ast.tokenTag(name_ident) == .identifier);
-    const name_bytes = ast.tokenSlice(name_ident);
+    const tag = ast.tokenTag(name_ident);
+    assert(tag == .period_identifier or tag == .identifier);
+    const name_bytes = std.mem.trimStart(u8, ast.tokenSlice(name_ident), ".");
     _ = w.unreferenced_globals.swapRemove(name_bytes);
 }
 

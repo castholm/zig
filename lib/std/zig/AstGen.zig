@@ -1012,7 +1012,11 @@ fn expr(gz: *GenZir, scope: *Scope, ri: ResultInfo, node: Ast.Node.Index) InnerE
                 .ref_coerced_ty, .ptr, .inferred_ptr, .destructure => return rvalue(gz, ri, res, node),
             }
         } else return simpleStrTok(gz, ri, tree.nodeMainToken(node), node, .enum_literal),
-        .error_value => return simpleStrTok(gz, ri, tree.nodeMainToken(node) + 2, node, .error_value),
+        .error_value => {
+            const main_token = tree.nodeMainToken(node);
+            const separate_dot = @intFromBool(tree.tokenTag(main_token + 1) == .period);
+            return simpleStrTok(gz, ri, main_token + 1 + separate_dot, node, .error_value);
+        },
         // TODO restore this when implementing https://github.com/ziglang/zig/issues/6025
         // .anyframe_literal => return rvalue(gz, ri, .anyframe_type, node),
         .anyframe_literal => {
@@ -11337,8 +11341,9 @@ fn rvalueInner(
 /// See also `appendIdentStr` and `parseStrLit`.
 fn identifierTokenString(astgen: *AstGen, token: Ast.TokenIndex) InnerError![]const u8 {
     const tree = astgen.tree;
-    assert(tree.tokenTag(token) == .identifier);
-    const ident_name = tree.tokenSlice(token);
+    const tag = tree.tokenTag(token);
+    assert(tag == .period_identifier or tag == .identifier);
+    const ident_name = std.mem.trimStart(u8, tree.tokenSlice(token), ".");
     if (!mem.startsWith(u8, ident_name, "@")) {
         return ident_name;
     }
@@ -11363,8 +11368,9 @@ fn appendIdentStr(
     buf: *ArrayListUnmanaged(u8),
 ) InnerError!void {
     const tree = astgen.tree;
-    assert(tree.tokenTag(token) == .identifier);
-    const ident_name = tree.tokenSlice(token);
+    const tag = tree.tokenTag(token);
+    assert(tag == .period_identifier or tag == .identifier);
+    const ident_name = std.mem.trimStart(u8, tree.tokenSlice(token), ".");
     if (!mem.startsWith(u8, ident_name, "@")) {
         return buf.appendSlice(astgen.gpa, ident_name);
     } else {

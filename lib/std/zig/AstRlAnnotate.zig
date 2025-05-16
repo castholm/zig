@@ -786,8 +786,9 @@ fn expr(astrl: *AstRlAnnotate, node: Ast.Node.Index, block: ?*Block, ri: ResultI
 
 fn identString(astrl: *AstRlAnnotate, token: Ast.TokenIndex) ![]const u8 {
     const tree = astrl.tree;
-    assert(tree.tokenTag(token) == .identifier);
-    const ident_name = tree.tokenSlice(token);
+    const tag = tree.tokenTag(token);
+    assert(tag == .period_identifier or tag == .identifier);
+    const ident_name = std.mem.trimStart(u8, tree.tokenSlice(token), ".");
     if (!std.mem.startsWith(u8, ident_name, "@")) {
         return ident_name;
     }

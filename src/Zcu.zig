@@ -1900,7 +1900,7 @@ pub const SrcLoc = struct {
                 for (full.ast.fields) |field_node| {
                     // . IDENTIFIER = field_node
                     const name_token = tree.firstToken(field_node) - 2;
-                    const name = tree.tokenSlice(name_token);
+                    const name = std.mem.trimStart(u8, tree.tokenSlice(name_token), ".");
                     if (std.mem.eql(u8, name, wanted)) {
                         return tree.tokensToSpan(
                             name_token - 1,

@@ -214,7 +214,7 @@ pub const File = struct {
 
                 .field_access => {
                     const object_node, const field_ident = ast.nodeData(node).node_and_token;
-                    const field_name = ast.tokenSlice(field_ident);
+                    const field_name = std.mem.trimStart(u8, ast.tokenSlice(field_ident), ".");
 
                     switch (categorize_expr(file_index, object_node)) {
                         .alias => |aliasee| if (aliasee.get().get_child(field_name)) |decl_index| {
